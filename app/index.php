@@ -2076,10 +2076,50 @@ function parse_ice_servers(string $value): array
     if ($value[0] === '[' || $value[0] === '{') {
         $decoded = json_decode($value, true);
         if (is_array($decoded)) {
-            return array_is_list($decoded) ? $decoded : [$decoded];
+            return sanitize_ice_servers(array_is_list($decoded) ? $decoded : [$decoded]);
         }
     }
-    return array_values(array_filter(array_map('trim', preg_split('/[\r\n,;]+/', $value))));
+    return sanitize_ice_servers(array_values(array_filter(array_map('trim', preg_split('/[\r\n,;]+/', $value)))));
+}
+
+function sanitize_ice_servers(array $servers): array
+{
+    $clean = [];
+    foreach ($servers as $server) {
+        if (is_string($server)) {
+            $url = trim($server);
+            if ($url === '') {
+                continue;
+            }
+            if (preg_match('~^turns?:~i', $url)) {
+                continue;
+            }
+            $clean[] = $url;
+            continue;
+        }
+        if (!is_array($server)) {
+            continue;
+        }
+        $urls = $server['urls'] ?? null;
+        $urlList = is_array($urls) ? $urls : [$urls];
+        $urlList = array_values(array_filter(array_map('strval', $urlList)));
+        if (!$urlList) {
+            continue;
+        }
+        $hasTurn = false;
+        foreach ($urlList as $url) {
+            if (preg_match('~^turns?:~i', trim($url))) {
+                $hasTurn = true;
+                break;
+            }
+        }
+        if ($hasTurn && ((string)($server['username'] ?? '') === '' || (string)($server['credential'] ?? '') === '')) {
+            continue;
+        }
+        $server['urls'] = is_array($urls) ? $urlList : $urlList[0];
+        $clean[] = $server;
+    }
+    return $clean;
 }
 
 function extension_auth_row(string $extension, string $password): ?array
@@ -4304,7 +4344,7 @@ function page_settings(): void
             <h2><i class="bi bi-hdd-network"></i> AMI do Asterisk</h2>
             <p class="muted">Usado para disparar campanhas, URA, URA Reversa e consultar chamadas em tempo real pelo servidor.</p>
             <div class="form-grid two">
-                <label>Host AMI <input name="ami_host" value="<?= e((string)setting('ami_host', '')) ?>"></label>
+                <label>Host AMI <input name="ami_host" value="<?= e((string)setting('ami_host', '177.7.53.168')) ?>"></label>
                 <label>Porta AMI <input name="ami_port" type="number" value="<?= e((string)setting('ami_port', '5038')) ?>"></label>
                 <label>Usuario AMI <input name="ami_user" value="<?= e((string)setting('ami_user', 'discadora_panel')) ?>"></label>
                 <label>Senha AMI <input name="ami_secret" type="password" value="<?= e((string)setting('ami_secret', '')) ?>"></label>

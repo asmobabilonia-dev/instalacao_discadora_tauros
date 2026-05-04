@@ -368,8 +368,16 @@
 
     function normalizeIceServers(servers) {
         return (servers || []).map((server) => {
-            if (typeof server === 'string') return { urls: server };
-            if (server && typeof server === 'object') return server;
+            if (typeof server === 'string') {
+                if (/^turns?:/i.test(server.trim())) return null;
+                return { urls: server };
+            }
+            if (server && typeof server === 'object') {
+                const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                const hasTurn = urls.some((url) => /^turns?:/i.test(String(url || '').trim()));
+                if (hasTurn && (!server.username || !server.credential)) return null;
+                return server;
+            }
             return null;
         }).filter(Boolean);
     }
