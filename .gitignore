@@ -1,0 +1,10 @@
+app/config/config.php
+app/data/*
+!app/data/.gitkeep
+app/uploads/*
+!app/uploads/.gitkeep
+*.log
+*.bak
+*.tmp
+tauros-install.env
+

@@ -1,0 +1,11 @@
+Depois de subir este projeto no GitHub, o instalador pode ser executado assim:
+
+curl -fsSL https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPOSITORIO/main/deploy/asterisk-template/install.sh -o install.sh && sudo bash install.sh
+
+Ou, para usar .env antes da instalacao:
+
+git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git discadora
+cd discadora/deploy/asterisk-template
+cp .env.example .env
+nano .env
+sudo bash install.sh
