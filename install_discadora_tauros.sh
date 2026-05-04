@@ -127,8 +127,30 @@ DB_PASSWORD_SQL="$(sql_escape "$DB_PASSWORD")"
 info "Instalando pacotes"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y nginx mariadb-server curl ca-certificates unzip git openssl \
-  rsync php-fpm php-cli php-mysql php-curl php-mbstring php-xml php-zip php-gd php-intl php-bcmath php-soap php-sqlite3
+apt-get install -y curl ca-certificates unzip git openssl rsync lsb-release apt-transport-https gnupg2
+
+PHP_PREFIX="php"
+OS_ID=""
+OS_VERSION=""
+if [[ -f /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  OS_ID="${ID:-}"
+  OS_VERSION="${VERSION_ID:-}"
+fi
+
+if [[ "$OS_ID" == "debian" && "${OS_VERSION%%.*}" -le 11 ]]; then
+  info "Debian ${OS_VERSION} detectado. Ativando repositorio Sury para PHP 8.2"
+  curl -fsSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/sury-php.gpg
+  echo "deb [signed-by=/usr/share/keyrings/sury-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/sury-php.list
+  apt-get update
+  PHP_PREFIX="php8.2"
+fi
+
+apt-get install -y nginx mariadb-server \
+  "${PHP_PREFIX}-fpm" "${PHP_PREFIX}-cli" "${PHP_PREFIX}-mysql" "${PHP_PREFIX}-curl" \
+  "${PHP_PREFIX}-mbstring" "${PHP_PREFIX}-xml" "${PHP_PREFIX}-zip" "${PHP_PREFIX}-gd" \
+  "${PHP_PREFIX}-intl" "${PHP_PREFIX}-bcmath" "${PHP_PREFIX}-soap" "${PHP_PREFIX}-sqlite3"
 
 if [[ "$ENABLE_SSL" =~ ^[sS]$ ]]; then
   apt-get install -y certbot python3-certbot-nginx
