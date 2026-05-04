@@ -247,7 +247,7 @@ if (\$id > 0) {
     'magnus_sync_host' => '${MagnusHost_PHP}',
 ];
 foreach (\$settings as \$key => \$value) {
-    \$sql = Database::isMysql() ? 'INSERT INTO settings(`key`, value) VALUES(?, ?) ON DUPLICATE KEY UPDATE value=VALUES(value)' : 'INSERT OR REPLACE INTO settings(key, value) VALUES(?, ?)';
+    \$sql = Database::isMysql() ? 'INSERT INTO settings(\`key\`, value) VALUES(?, ?) ON DUPLICATE KEY UPDATE value=VALUES(value)' : 'INSERT OR REPLACE INTO settings(key, value) VALUES(?, ?)';
     \$db->prepare(\$sql)->execute([\$key, \$value]);
 }
 echo 'OK'.PHP_EOL;
