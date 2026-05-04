@@ -352,7 +352,7 @@
         const response = await fetch(`?page=api_webrtc_config&account_id=${encodeURIComponent(accountId || 0)}`);
         const data = await response.json();
         if (!data.ok || !data.account || !data.account.websocketUrl) {
-            throw new Error('Conta sem WebSocket SIP. MicroSIP usa UDP; navegador precisa wss://host:8089/ws.');
+            throw new Error('Este tronco esta como MicroSIP/UDP ou sem WebSocket. Para o softphone do navegador use um tronco WebRTC com wss://host:8089/ws.');
         }
         return data.account;
     }
@@ -361,7 +361,7 @@
         const response = await fetch(`?page=api_extension_config&extension=${encodeURIComponent(credentials.extension || '')}&password=${encodeURIComponent(credentials.password || '')}`);
         const data = await response.json();
         if (!data.ok || !data.account || !data.account.websocketUrl) {
-            throw new Error('Ramal ou senha invalido, ou conta WebRTC sem WebSocket.');
+            throw new Error('Ramal/senha invalido ou tronco sem WebSocket WSS. MicroSIP/UDP nao conecta no navegador.');
         }
         return data.account;
     }

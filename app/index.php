@@ -751,12 +751,18 @@ function handle_posts(string $page, array $user): void
     if ($action === 'save_sip') {
         Auth::requireAdmin();
         $id = (int)post('id', 0);
+        $websocketUrl = trim((string)post('websocket_url'));
+        $webrtcEnabled = post('webrtc_enabled', '0') === '1' ? 1 : 0;
+        if ($webrtcEnabled === 1 && !valid_webrtc_websocket_url($websocketUrl)) {
+            flash('Para usar no WebRTC, informe um WebSocket SIP valido em WSS. Exemplo: wss://sip.protegerconta.online:8089/ws. Se for conta MicroSIP/UDP, desmarque Usar no WebRTC.', 'error');
+            redirect('?page=sip' . ($id > 0 ? '&edit=' . $id : ''));
+        }
         $data = [
             post('name'), post('label'), post('sip_server'), post('domain'), post('proxy'), post('username'),
             post('auth_user'), post('password'), post('display_name'), post('transport'), (int)post('port', 5060),
             post('stun_server'), post('voicemail'), post('publish_presence', '0') === '1' ? 1 : 0,
             post('dial_context'), post('channel_template'), post('caller_id'), post('active', '0') === '1' ? 1 : 0,
-            post('websocket_url'), post('webrtc_enabled', '0') === '1' ? 1 : 0, post('ice_servers'), (int)post('register_expires', 300), post('dtmf_type'),
+            $websocketUrl, $webrtcEnabled, post('ice_servers'), (int)post('register_expires', 300), post('dtmf_type'),
         ];
         if ($id > 0) {
             $data[] = $id;
@@ -1989,23 +1995,32 @@ function user_can_spend(int $userId): bool
     return (float)$user['credit_balance'] > 0;
 }
 
+function valid_webrtc_websocket_url(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    return (bool)preg_match('~^wss://[^\\s/]+(?::\\d+)?/ws/?$~i', $url);
+}
+
 function webrtc_account_config(int $accountId, ?array $user = null): ?array
 {
     $db = Database::conn();
     $user ??= Auth::user() ?: [];
     if ($accountId > 0) {
         if (is_admin_user($user)) {
-            $stmt = $db->prepare('SELECT * FROM sip_accounts WHERE id=? AND active=1 AND webrtc_enabled=1');
+            $stmt = $db->prepare("SELECT * FROM sip_accounts WHERE id=? AND active=1 AND webrtc_enabled=1 AND websocket_url LIKE 'wss://%' AND websocket_url <> ''");
             $stmt->execute([$accountId]);
         } else {
-            $stmt = $db->prepare('SELECT DISTINCT s.* FROM sip_accounts s JOIN extensions e ON e.sip_account_id=s.id WHERE s.id=? AND s.active=1 AND s.webrtc_enabled=1 AND e.active=1 AND e.user_id=? LIMIT 1');
+            $stmt = $db->prepare("SELECT DISTINCT s.* FROM sip_accounts s JOIN extensions e ON e.sip_account_id=s.id WHERE s.id=? AND s.active=1 AND s.webrtc_enabled=1 AND s.websocket_url LIKE 'wss://%' AND s.websocket_url <> '' AND e.active=1 AND e.user_id=? LIMIT 1");
             $stmt->execute([$accountId, (int)$user['id']]);
         }
     } else {
         if (is_admin_user($user)) {
-            $stmt = $db->query('SELECT * FROM sip_accounts WHERE active=1 AND webrtc_enabled=1 ORDER BY id LIMIT 1');
+            $stmt = $db->query("SELECT * FROM sip_accounts WHERE active=1 AND webrtc_enabled=1 AND websocket_url LIKE 'wss://%' AND websocket_url <> '' ORDER BY id LIMIT 1");
         } else {
-            $stmt = $db->prepare('SELECT DISTINCT s.* FROM sip_accounts s JOIN extensions e ON e.sip_account_id=s.id WHERE s.active=1 AND s.webrtc_enabled=1 AND e.active=1 AND e.user_id=? ORDER BY s.id LIMIT 1');
+            $stmt = $db->prepare("SELECT DISTINCT s.* FROM sip_accounts s JOIN extensions e ON e.sip_account_id=s.id WHERE s.active=1 AND s.webrtc_enabled=1 AND s.websocket_url LIKE 'wss://%' AND s.websocket_url <> '' AND e.active=1 AND e.user_id=? ORDER BY s.id LIMIT 1");
             $stmt->execute([(int)$user['id']]);
         }
     }
@@ -2072,7 +2087,7 @@ function extension_auth_row(string $extension, string $password): ?array
     if ($extension === '' || $password === '') {
         return null;
     }
-    $stmt = Database::conn()->prepare('SELECT e.*, s.name AS account_name, s.domain, s.sip_server, s.websocket_url, s.ice_servers, s.register_expires, s.dtmf_type, s.caller_id AS sip_caller_id FROM extensions e JOIN sip_accounts s ON s.id=e.sip_account_id WHERE e.extension=? AND e.secret=? AND e.active=1 AND s.active=1 AND s.webrtc_enabled=1 LIMIT 1');
+    $stmt = Database::conn()->prepare("SELECT e.*, s.name AS account_name, s.domain, s.sip_server, s.websocket_url, s.ice_servers, s.register_expires, s.dtmf_type, s.caller_id AS sip_caller_id FROM extensions e JOIN sip_accounts s ON s.id=e.sip_account_id WHERE e.extension=? AND e.secret=? AND e.active=1 AND s.active=1 AND s.webrtc_enabled=1 AND s.websocket_url LIKE 'wss://%' AND s.websocket_url <> '' LIMIT 1");
     $stmt->execute([$extension, $password]);
     $row = $stmt->fetch();
     return $row ?: null;
@@ -5073,7 +5088,7 @@ function page_sip(): void
             <label>Transporte <select name="transport"><?php foreach (['UDP','TCP','TLS','WS','WSS'] as $transport): ?><option value="<?= e($transport) ?>" <?= ($editing['transport'] ?? 'UDP') === $transport ? 'selected' : '' ?>><?= e($transport) ?></option><?php endforeach; ?></select></label>
             <label>Porta <input name="port" type="number" value="<?= e((string)($editing['port'] ?? 5060)) ?>"></label>
             <label>STUN <input name="stun_server" placeholder="stun.l.google.com:19302" value="<?= e($editing['stun_server'] ?? '') ?>"></label>
-            <label>WebSocket SIP <input name="websocket_url" placeholder="wss://seudominio.com:8089/ws" value="<?= e($editing['websocket_url'] ?? '') ?>"></label>
+            <label>WebSocket SIP <input name="websocket_url" placeholder="wss://sip.protegerconta.online:8089/ws" value="<?= e($editing['websocket_url'] ?? '') ?>"><small>Necessario apenas para softphone no navegador. MicroSIP usa UDP/TCP e nao usa este campo.</small></label>
             <label>ICE/STUN/TURN <input name="ice_servers" value="<?= e($editing['ice_servers'] ?? 'stun:stun.l.google.com:19302') ?>"></label>
             <label>Registro expira <input name="register_expires" type="number" value="<?= e((string)($editing['register_expires'] ?? 300)) ?>"></label>
             <label>Correio de voz <input name="voicemail" value="<?= e($editing['voicemail'] ?? '') ?>"></label>
@@ -5082,7 +5097,7 @@ function page_sip(): void
             <label>Caller ID <input name="caller_id" value="<?= e($editing['caller_id'] ?? '') ?>"></label>
             <label>DTMF <select name="dtmf_type"><?php foreach (['rtp' => 'RTP', 'info' => 'SIP INFO'] as $value => $label): ?><option value="<?= e($value) ?>" <?= ($editing['dtmf_type'] ?? 'rtp') === $value ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
             <label class="toggle"><input type="checkbox" name="publish_presence" value="1" <?= (int)($editing['publish_presence'] ?? 0) === 1 ? 'checked' : '' ?>> Publicar presenca</label>
-            <label class="toggle"><input type="checkbox" name="webrtc_enabled" value="1" <?= (int)($editing['webrtc_enabled'] ?? 1) === 1 ? 'checked' : '' ?>> Usar no WebRTC</label>
+            <label class="toggle"><input type="checkbox" name="webrtc_enabled" value="1" <?= (int)($editing['webrtc_enabled'] ?? 0) === 1 ? 'checked' : '' ?>> Usar no WebRTC</label>
             <label class="toggle"><input type="checkbox" name="active" value="1" <?= (int)($editing['active'] ?? 1) === 1 ? 'checked' : '' ?>> Ativa</label>
             <div class="actions">
                 <button class="btn primary"><?= $editing ? 'Atualizar tronco' : 'Salvar tronco' ?></button>
@@ -5105,9 +5120,10 @@ function render_sip_table(array $rows): void
         echo '<td>' . e($row['name']) . '</td>';
         echo '<td>' . e($row['sip_server']) . '</td>';
         echo '<td>' . e($row['username']) . '</td>';
-        echo '<td>' . e($row['websocket_url'] ?: '-') . '</td>';
+        $ws = trim((string)($row['websocket_url'] ?? ''));
+        echo '<td>' . e($ws !== '' ? $ws : 'MicroSIP/UDP') . '</td>';
         echo '<td>' . e($row['transport']) . '</td>';
-        echo '<td>' . ((int)$row['webrtc_enabled'] === 1 ? 'Sim' : 'Nao') . '</td>';
+        echo '<td>' . ((int)$row['webrtc_enabled'] === 1 && valid_webrtc_websocket_url($ws) ? 'Sim' : 'Nao') . '</td>';
         echo '<td>' . ((int)$row['active'] === 1 ? 'Sim' : 'Nao') . '</td>';
         echo '<td><div class="row-actions">';
         echo '<a class="btn compact" href="?page=sip&edit=' . e((string)$row['id']) . '">Editar</a>';
